@@ -1,13 +1,16 @@
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
+	"github.com/redis/go-redis/v9"
 	"github.com/rs/xid"
 	"github.com/shubhamxg/go-hunger/models"
 )
@@ -40,12 +43,15 @@ func recipe_response(resp Inc) gin.H {
 }
 
 type RecipeHandler struct {
-	db *sqlx.DB
+	db          *sqlx.DB
+	redisClient *redis.Client
 }
 
 func NewRecipesHandler() *RecipeHandler {
+	redis := models.RedisConfig{}
 	return &RecipeHandler{
-		db: models.Start(),
+		db:          models.Start(),
+		redisClient: redis.Start(),
 	}
 }
 
@@ -64,6 +70,10 @@ func (handler *RecipeHandler) NewRecipeHandler(c *gin.Context) {
 	}
 	tx.MustExec(`INSERT INTO recipes (recipe_data) VALUES ($1::jsonb);`, string(json_new_recipe))
 	tx.Commit()
+
+	// Removing Cache from redis when new data is added
+	log.Println("Removing Data from Redis")
+	handler.redisClient.Del(context.Background(), "recipes")
 
 	c.JSON(http.StatusOK, recipe_response(added))
 }
@@ -99,6 +109,11 @@ func (handler *RecipeHandler) UpdateRecipeHandler(c *gin.Context) {
 		return
 	}
 	tx.Commit()
+
+	// Removing Cache from redis when new data is added
+	log.Println("Removing Data from Redis")
+	handler.redisClient.Del(context.Background(), "recipes")
+
 	c.JSON(http.StatusOK, recipe_response(updated))
 }
 
@@ -117,6 +132,11 @@ func (handler *RecipeHandler) DeleteRecipeHandler(c *gin.Context) {
 		return
 	}
 	tx.Commit()
+
+	// Removing Cache from redis when new data is added
+	log.Println("Removing Data from Redis")
+	handler.redisClient.Del(context.Background(), "recipes")
+
 	c.JSON(http.StatusOK, recipe_response(deleted))
 }
 
@@ -167,21 +187,45 @@ func (handler *RecipeHandler) GetRecipeHandler(c *gin.Context) {
 }
 
 func (handler *RecipeHandler) ListRecipesHandler(c *gin.Context) {
-	recipes := []models.Recipes{}
-	if err := handler.db.Select(&recipes, `SELECT * FROM Recipes`); err != nil {
+	val, err := handler.redisClient.Get(context.Background(), "recipes").Result()
+	if err == redis.Nil {
+		log.Printf("Requested To Postgres")
+		recipes := []models.Recipes{}
+		if err := handler.db.Select(&recipes, `SELECT * FROM Recipes`); err != nil {
+			c.JSON(http.StatusInternalServerError, recipe_response(backend_error))
+			return
+		}
+
+		filtered_recipes := make([]models.Recipe, 0)
+		if len(recipes) > 0 {
+			for i := 0; i < len(recipes); i++ {
+				single_recipe := models.Recipe{}
+				_ = json.Unmarshal(recipes[i].Recipe_data, &single_recipe)
+				filtered_recipes = append(filtered_recipes, single_recipe)
+			}
+
+			// Adding data in redis
+			if len(filtered_recipes) > 0 {
+				json_recipes, err := json.Marshal(filtered_recipes)
+				if err != nil {
+					panic(err)
+				}
+				if _, err := handler.redisClient.Set(context.Background(), "recipes", string(json_recipes), time.Hour).Result(); err != nil {
+					fmt.Println("Something went wrong in Storing data in redis")
+				}
+			}
+			c.JSON(http.StatusOK, filtered_recipes)
+			return
+		}
+
+	} else if err != nil {
 		c.JSON(http.StatusInternalServerError, recipe_response(backend_error))
 		return
-	}
-
-	filtered_recipes := make([]models.Recipe, 0)
-	if len(recipes) > 0 {
-		for i := 0; i < len(recipes); i++ {
-			single_recipe := models.Recipe{}
-			_ = json.Unmarshal(recipes[i].Recipe_data, &single_recipe)
-			filtered_recipes = append(filtered_recipes, single_recipe)
-		}
+	} else {
+		log.Printf("Request to Redis")
+		filtered_recipes := make([]models.Recipe, 0)
+		json.Unmarshal([]byte(val), &filtered_recipes)
 		c.JSON(http.StatusOK, filtered_recipes)
 		return
 	}
-	c.JSON(http.StatusNotFound, recipe_response(not_found))
 }
