@@ -1,7 +1,6 @@
 package models
 
 import (
-	// "database/sql"
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
@@ -41,16 +40,6 @@ func (cfg PostgresConfig) Default() string {
 	return cfg.New()
 }
 
-func Start() *sqlx.DB {
-	postgres := PostgresConfig{}
-	postgres.Default()
-	db, err := postgres.Open()
-	if err != nil {
-		panic(err)
-	}
-	return db
-}
-
 func (cfg PostgresConfig) Open() (*sqlx.DB, error) {
 	// db, err := sql.Open("pgx", cfg.Default())
 	db, err := sqlx.Connect("postgres", cfg.Default())
@@ -58,4 +47,15 @@ func (cfg PostgresConfig) Open() (*sqlx.DB, error) {
 		return nil, fmt.Errorf("open: %w", err)
 	}
 	return db, nil
+}
+
+func Start() *sqlx.DB {
+	postgres := PostgresConfig{}
+	postgres.Default()
+	db, err := postgres.Open()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("Connected to PostgresDB")
+	return db
 }
