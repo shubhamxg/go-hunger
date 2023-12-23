@@ -30,11 +30,11 @@ func (cfg PostgresConfig) New() string {
 
 func (cfg PostgresConfig) Default() string {
 	cfg = PostgresConfig{
-		Host:     "localhost",
-		Port:     "5433",
-		User:     "foo",
-		Password: "bar",
-		Database: "go-hunger",
+		Host:     Env(DB_HOST),
+		Port:     Env(DB_PORT),
+		User:     Env(DB_USER),
+		Password: Env(DB_PASSWORD),
+		Database: Env(DB_DATABASE),
 		SSLMode:  "disable",
 	}
 	return cfg.New()

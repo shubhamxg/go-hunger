@@ -28,16 +28,24 @@ var schema = `
 	);
 `
 
+var schema_user = `
+	CREATE TABLE users (
+	id SERIAL PRIMARY KEY,
+	email TEXT UNIQUE NOT NULL,
+	password TEXT NOT NULL
+	);
+`
+
 func main() {
 	// recipes = make([]recipe, 0)
 	// file, _ := os.ReadFile("recipes.json")
 	// _ = json.Unmarshal([]byte(file), &recipes)
 	db := models.Start()
-	// // db.MustExec(schema)
+	db.MustExec(schema_user)
 	// for i := 0; i < len(recipes); i++ {
 	// 	Recipe(recipes[i], db)
 	// }
-	GetRecipe(db)
+	// GetRecipe(db)
 }
 
 // func Recipe(recipe recipe, db *sqlx.DB) {

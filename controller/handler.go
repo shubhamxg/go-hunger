@@ -23,6 +23,11 @@ const (
 	updated
 	deleted
 	added
+	unauthorized
+	redis_error
+	invalid_creds
+	invalid_token
+	not_expired
 )
 
 func recipe_response(resp Inc) gin.H {
@@ -37,14 +42,36 @@ func recipe_response(resp Inc) gin.H {
 		return gin.H{"message": "Recipe Added Successfully"}
 	case deleted:
 		return gin.H{"message": "Recipe deleted Successfully"}
+	case unauthorized:
+		return gin.H{"error": "API Key is not provided or invalid"}
+	case redis_error:
+		return gin.H{"error": "Somewent wrong with redis"}
+	case invalid_creds:
+		return gin.H{"error": "Invalid username or password"}
+	case invalid_token:
+		return gin.H{"error": "Invalid Token is Provided"}
+	case not_expired:
+		return gin.H{"error": "Token is not Expired Yet"}
 	default:
 		return gin.H{"error": "Recipe Response not found"}
 	}
 }
 
+var schema_user = `
+	CREATE TABLE users (
+	id SERIAL PRIMARY KEY,
+	email TEXT UNIQUE NOT NULL,
+	password TEXT NOT NULL
+	);
+`
+
 type RecipeHandler struct {
 	db          *sqlx.DB
 	redisClient *redis.Client
+}
+
+func (handler *RecipeHandler) Foo() {
+	handler.db.MustExec(schema_user)
 }
 
 func NewRecipesHandler() *RecipeHandler {
@@ -219,7 +246,7 @@ func (handler *RecipeHandler) ListRecipesHandler(c *gin.Context) {
 		}
 
 	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, recipe_response(backend_error))
+		c.JSON(http.StatusInternalServerError, recipe_response(redis_error))
 		return
 	} else {
 		log.Printf("Request to Redis")

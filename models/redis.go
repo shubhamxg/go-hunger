@@ -15,8 +15,8 @@ type RedisConfig struct {
 
 func (cfg *RedisConfig) Default() RedisConfig {
 	return RedisConfig{
-		Addr: "localhost:6379",
-		Pass: "",
+		Addr: fmt.Sprintf("%s:%s", Env(REDIS_HOST), Env(REDIS_PORT)),
+		Pass: Env(REDIS_PASSWORD),
 		Db:   0,
 	}
 }
